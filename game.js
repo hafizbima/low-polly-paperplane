@@ -5,6 +5,7 @@ export const themes = [
 ];
 export const move = (value, delta) => Math.max(-1, Math.min(1, value + delta));
 export const biome = distance => Math.floor(distance / 500) % 3;
+export const animationTime = (game, delta) => game.time + (!game.paused && ['ready','playing'].includes(game.status) ? Math.min(delta,.04) : 0);
 // Recycle only behind the camera (z=16), back beyond the fog (z=-95).
 export const sceneryZ = (start, distance) => 24 - ((24 - start - distance) % 192 + 192) % 192;
 export const levels = {
@@ -16,10 +17,17 @@ export function pace(distance, level) {
   const setting = levels[level];
   return {speed:Math.min(setting.maxSpeed,setting.speed+distance/150), interval:Math.max(setting.minInterval,setting.interval-distance/2000)};
 }
-export function wave(distance, level = 'easy', random = Math.random) {
+export function wave(distance, level = 'easy', random = Math.random, stage = biome(distance)) {
   const setting = levels[level];
   const cells = Array.from({length: 9}, (_, i) => i);
   for (let i = cells.length - 1; i > 0; i--) { const j = Math.floor(random() * (i + 1)); [cells[i], cells[j]] = [cells[j], cells[i]]; }
-  return cells.slice(0, Math.min(setting.maxCount, setting.count + Math.floor(distance / 350))).map(i => ({ x: i % 3 - 1, y: Math.floor(i / 3) - 1, z: -90 }));
+  const pattern = Math.floor(random()*4), gap = Math.floor(random()*3);
+  // Prefer a horizontal, vertical, or diagonal opening; shuffle breaks ties.
+  if(pattern<3) cells.sort((a,b)=>{
+    const rank=i=>pattern===0?Number(i%3===gap):pattern===1?Number(Math.floor(i/3)===gap):Number((i%3+Math.floor(i/3))%3===gap);
+    return rank(a)-rank(b);
+  });
+  return cells.slice(0, Math.min(setting.maxCount, setting.count + Math.floor(distance / 350))).map(i => ({ x: i % 3 - 1, y: Math.floor(i / 3) - 1, z: -90, biome:stage, variant:Math.floor(random()*3), phase:random()*Math.PI*2, moving:level!=='easy' && random()<.5 }));
 }
-export function collides(x, y, obstacle) { return Math.abs(x - obstacle.x * 2.7) < 1.1 && Math.abs(y - (obstacle.y * 2 + 4)) < 0.9; }
+export function obstacleOffset(obstacle) { return obstacle.moving ? Math.sin((obstacle.z+90)*.13+obstacle.phase)*.3 : 0; }
+export function collides(x, y, obstacle) { return Math.abs(x - obstacle.x * 2.7) < 1.1 && Math.abs(y - (obstacle.y * 2 + 4 + obstacleOffset(obstacle))) < 0.9; }
